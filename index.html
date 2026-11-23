@@ -66,10 +66,10 @@ function update(dt){
    b.x+=dx/dist*push;b.y+=dy/dist*push;
    a.face=Math.atan2(b.y-a.y,b.x-a.x);
    b.face=Math.atan2(a.y-b.y,a.x-b.x);
-   const toughA=1+(a.owner===1?.06:0),toughB=1+(b.owner===2?.05+g.stage*.012:0);
-   let dmgA=Math.min(a.n,(1.6+Math.sqrt(Math.max(0,b.n))*.43)*dt*toughB);
-   let dmgB=Math.min(b.n,(1.6+Math.sqrt(Math.max(0,a.n))*.43)*dt*toughA);
-   a.n-=dmgA;b.n-=dmgB;
+   const rate=(1.6+Math.sqrt(Math.min(a.n,b.n))*.43)*dt;
+   a.loss=(a.loss||0)+rate;b.loss=(b.loss||0)+rate;
+   const losses=Math.min(a.n,b.n,Math.floor(Math.min(a.loss,b.loss)));
+   a.n-=losses;b.n-=losses;a.loss-=losses;b.loss-=losses;
    a.hit=b.hit=.20;
    if(rnd(Math.floor(g.elapsed*23)+i*13)>.58){
      particles.push({x:(a.x+b.x)/2+(rnd(g.elapsed*85+i)-.5)*13,y:(a.y+b.y)/2-8+(rnd(g.elapsed*37+i)-.5)*12,vx:(rnd(i+g.elapsed*3)-.5)*40,vy:-22-rnd(i*3+g.elapsed)*30,life:.25,color:rnd(i+g.elapsed)> .5?'#ffdb86':'#f8ede1',size:2+rnd(i+13)*3});
@@ -83,8 +83,9 @@ function update(dt){
    if(p.dist<=step+48){
       let n=g.nodes[u.target];
       if(n.owner===u.owner)n.n=Math.min(140,n.n+u.n);
-      else{let damage=u.n*(u.owner===1?1:1.04+g.stage*.025);n.n-=damage;
-        if(n.n<=0){n.owner=u.owner;n.n=Math.max(2,Math.round(-n.n*.45+u.n*.18));
+      else{let remaining=n.n-u.n;n.n=Math.max(0,remaining);
+        if(remaining===0){n.owner=0;n.prod=0;}
+        if(remaining<0){n.owner=u.owner;n.n=-remaining;n.prod=0;
            for(let j=0;j<20;j++)particles.push({x:n.x,y:n.y,vx:(rnd(j*3)-.5)*110,vy:(rnd(j*7)-.5)*110,life:.7+rnd(j)*.4,color:j%2?'#ffc87a':'#d8e4b1'});
            tone(u.owner===1?600:180,.21,'sawtooth');hint(u.owner===1?'Поселение захвачено!':'Противник занял поселение');
         }
@@ -145,9 +146,9 @@ ellipse(0,46,33,16,'#081e1bbd');ctx.textAlign='center';ctx.textBaseline='middle'
 function soldier(u,time,g){
 let xx=u.x,yy=u.y;const team=u.owner===1,accent=team?'#49b3f2':'#f26757',accentDark=team?'#1d527d':'#823429',num=u.n,phase=time*(u.engaged?13:9)+u.phase,ang=(u.face??Math.atan2(u.ty-yy,u.tx-xx))+Math.PI/2;
 // Each group contains multiple visible individually animated soldiers.
-let crew=Math.min(5,Math.max(1,Math.ceil(num/3)));ctx.save();ctx.translate(xx,yy);ctx.rotate(ang);ellipse(0,9,crew*7+13,13,'#10252275');
+let crew=Math.max(1,num);ctx.save();ctx.translate(xx,yy);ctx.rotate(ang);ellipse(0,9,crew*7+13,13,'#10252275');
 if(u.engaged){ctx.strokeStyle='#e3b46b99';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,0,19+Math.sin(phase)*3,-1.4,1.2);ctx.stroke()}
-for(let i=crew-1;i>=0;i--){let lane=(i-(crew-1)/2)*13,depth=(i%2)*10-5,swing=Math.sin(phase+i*1.9),bounce=Math.abs(Math.sin(phase+i*2))*2.5;
+for(let i=crew-1;i>=0;i--){let cols=Math.min(3,crew),lane=(i%cols-(cols-1)/2)*30,depth=Math.floor(i/cols)*29-12,swing=Math.sin(phase+i*1.9),bounce=Math.abs(Math.sin(phase+i*2))*2.5;
 ctx.save();ctx.translate(lane,depth-bounce);let unitScale=1.12;ctx.scale(unitScale,unitScale);
 // armored feet and separate knees
 ctx.lineCap='round';ctx.strokeStyle='#352f2a';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(-4,6);ctx.lineTo(-5+swing*3,14);ctx.moveTo(4,6);ctx.lineTo(5-swing*3,14);ctx.stroke();ctx.strokeStyle=team?'#5d6880':'#765b54';ctx.lineWidth=4.5;ctx.beginPath();ctx.moveTo(-5+swing*3,12);ctx.lineTo(-5+swing*3,16);ctx.moveTo(5-swing*3,12);ctx.lineTo(5-swing*3,16);ctx.stroke();
@@ -171,7 +172,7 @@ let targeting=false;function getPoint(e){return {x:(e.clientX-ox-camera.x)/scale
 function nearest(p){if(!game)return null;let arr=game.nodes.map(n=>({n,d:Math.hypot(n.x-p.x,n.y-p.y)})).sort((a,b)=>a.d-b.d);return arr[0].d<70?arr[0].n:null}
 canvas.addEventListener('pointerdown',e=>{if(mode!=='battle'||game.end)return;pointer={x:e.clientX,y:e.clientY,sx:e.clientX,sy:e.clientY,t:performance.now()};canvas.setPointerCapture(e.pointerId)});
 canvas.addEventListener('pointermove',e=>{if(!pointer||mode!=='battle')return;let dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;if(Math.hypot(e.clientX-pointer.sx,e.clientY-pointer.sy)>16){camera.x=clamp(camera.x+dx,-width*.55,width*.55);camera.y=clamp(camera.y+dy,-height*.35,height*.35)}pointer.x=e.clientX;pointer.y=e.clientY});
-canvas.addEventListener('pointerup',e=>{if(!pointer||mode!=='battle'||game.end)return;let dist=Math.hypot(e.clientX-pointer.sx,e.clientY-pointer.sy),p=getPoint(e),n=nearest(p);if(dist<20&&n){if(targeting){if(n.owner!==1){let own=game.nodes.filter(a=>a.owner===1).sort((a,b)=>Math.hypot(a.x-n.x,a.y-n.y)-Math.hypot(b.x-n.x,b.y-n.y))[0];if(own){n.n=Math.max(0,n.n-32-game.era*2);game.abilityCooldown=24;targeting=false;tone(180,.33,'sawtooth');for(let j=0;j<22;j++)particles.push({x:n.x,y:n.y,vx:(rnd(j)-.5)*200,vy:(rnd(j*8)-.5)*200,life:.8,color:'#ffce7a'});if(n.n===0){n.owner=1;n.n=6}}}else{hint('Выбери вражескую или нейтральную цель')} }else if(selected===-1){if(n.owner===1){selected=n.id;hint('Теперь нажми на вражеское или нейтральное поселение');tone(550,.05)}else hint('Сначала выбери синее поселение')}else if(n.id===selected){selected=-1}else{let src=game.nodes[selected];if(src.owner===1)send(src,n,percent);selected=-1}}pointer=null});
+canvas.addEventListener('pointerup',e=>{if(!pointer||mode!=='battle'||game.end)return;let dist=Math.hypot(e.clientX-pointer.sx,e.clientY-pointer.sy),p=getPoint(e),n=nearest(p);if(dist<20&&n){if(targeting){if(n.owner!==1){let own=game.nodes.filter(a=>a.owner===1).sort((a,b)=>Math.hypot(a.x-n.x,a.y-n.y)-Math.hypot(b.x-n.x,b.y-n.y))[0];if(own){n.n=Math.max(0,n.n-32-game.era*2);game.abilityCooldown=24;targeting=false;tone(180,.33,'sawtooth');for(let j=0;j<22;j++)particles.push({x:n.x,y:n.y,vx:(rnd(j)-.5)*200,vy:(rnd(j*8)-.5)*200,life:.8,color:'#ffce7a'});if(n.n===0){n.owner=0;n.prod=0}}}else{hint('Выбери вражескую или нейтральную цель')} }else if(selected===-1){if(n.owner===1){selected=n.id;hint('Теперь нажми на вражеское или нейтральное поселение');tone(550,.05)}else hint('Сначала выбери синее поселение')}else if(n.id===selected){selected=-1}else{let src=game.nodes[selected];if(src.owner===1)send(src,n,percent);selected=-1}}pointer=null});
 $('#menu').onclick=()=>{if(mode!=='battle')return;mode='pause';show(`<div class="mark">⏸️</div><h1>Пауза</h1><p>Миссия ${game.lvl}: ${game.e.location}</p><button class="primary" id="resume">Продолжить</button><button class="secondary" id="restart">Повторить</button><button class="secondary" id="quit">Выбрать эпоху</button>`);$('#resume').onclick=()=>{mode='battle';hide()};$('#restart').onclick=()=>start(game.lvl);$('#quit').onclick=menu};
 $('#sound').onclick=()=>{muted=!muted;$('#sound').textContent=muted?'♪̸':'♫';tone(650)};
 document.querySelectorAll('[data-pct]').forEach(b=>b.onclick=()=>{percent=+b.dataset.pct;document.querySelectorAll('[data-pct]').forEach(el=>el.classList.toggle('selected',el===b));tone(490,.05)});
